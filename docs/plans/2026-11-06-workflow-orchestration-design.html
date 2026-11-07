@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Multica 工作流编排第一版设计方案（明确不完整，仅方案讨论，不含实现）">
+<title>工作流编排（Workflow Orchestration）设计方案</title>
+<style>
+:root {
+  --bg: #f5f4f1;
+  --surface: #ffffff;
+  --text: #1d2025;
+  --muted: #616875;
+  --border: #e3e0d9;
+  --border-strong: #cfcbc2;
+  --accent: #2f5fe0;
+  --accent-soft: #eef2ff;
+  --code-bg: #f2f1ed;
+  --code-text: #24292f;
+  --th-bg: #faf9f6;
+  --warn-bg: #fff8e8;
+  --warn-border: #e8a33d;
+  --warn-text: #8a5a12;
+  --shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 24px rgb(0 0 0 / 4%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131416;
+    --surface: #1a1c1f;
+    --text: #e8e7e3;
+    --muted: #a3a9b4;
+    --border: #2c3036;
+    --border-strong: #3a3f47;
+    --accent: #86a8ff;
+    --accent-soft: #1c2536;
+    --code-bg: #222529;
+    --code-text: #e8e7e3;
+    --th-bg: #202329;
+    --warn-bg: #2a2214;
+    --warn-border: #b37a20;
+    --warn-text: #f0c36a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 25%);
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  font-size: 16px;
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.page { display: grid; grid-template-columns: 272px minmax(0, 1fr); max-width: 1280px; margin: 0 auto; }
+.sidebar {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  padding: 2rem 1.5rem 3rem 2rem;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+.brand { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.brand strong { display: block; margin-top: 0.35rem; color: var(--text); font-size: 0.95rem; letter-spacing: 0; text-transform: none; }
+.toc-label { margin: 1.6rem 0 0.5rem; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+nav.toc ul { list-style: none; margin: 0; padding: 0; }
+nav.toc li { margin: 0; }
+nav.toc a {
+  display: block; padding: 0.22rem 0.55rem; margin-left: -0.55rem;
+  border-radius: 5px; color: var(--muted); font-size: 0.82rem; line-height: 1.45;
+}
+nav.toc a:hover { color: var(--text); background: var(--accent-soft); text-decoration: none; }
+nav.toc ul ul { margin: 0.1rem 0 0.35rem 0.7rem; border-left: 1px solid var(--border); padding-left: 0.45rem; }
+nav.toc ul ul a { font-size: 0.78rem; }
+.sidebar-meta { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.72rem; line-height: 1.7; }
+.content { min-width: 0; padding: 3.5rem 4rem 5rem; }
+article { max-width: 860px; }
+.cover { max-width: 860px; padding-bottom: 2.2rem; margin-bottom: 2.2rem; border-bottom: 1px solid var(--border); }
+.eyebrow { color: var(--accent); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.cover h1 { margin: 0.7rem 0 0.35rem; font-size: clamp(1.9rem, 4vw, 2.5rem); line-height: 1.3; letter-spacing: -0.01em; font-weight: 700; }
+.subtitle { margin: 0; color: var(--muted); font-size: 1rem; }
+.badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.2rem 0 1.6rem; }
+.badge { display: inline-block; padding: 0.18rem 0.65rem; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 0.75rem; color: var(--muted); background: var(--surface); }
+.badge.warn { color: var(--warn-text); border-color: var(--warn-border); background: var(--warn-bg); }
+.meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem 1.5rem; margin: 0 0 1.6rem; padding: 0; }
+.meta div { min-width: 0; }
+.meta dt { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.15rem; }
+.meta dd { margin: 0; font-size: 0.88rem; }
+.notice { padding: 0.9rem 1.1rem; border-left: 3px solid var(--warn-border); border-radius: 0 6px 6px 0; background: var(--warn-bg); color: var(--warn-text); font-size: 0.86rem; line-height: 1.7; }
+article h2 { margin: 3rem 0 1rem; padding-top: 1.4rem; border-top: 1px solid var(--border); font-size: 1.45rem; line-height: 1.4; font-weight: 700; scroll-margin-top: 1.2rem; }
+article > h2:first-child { margin-top: 0.6rem; padding-top: 0; border-top: 0; }
+article h3 { margin: 2rem 0 0.6rem; font-size: 1.08rem; font-weight: 600; scroll-margin-top: 1.2rem; }
+article h4 { margin: 1.5rem 0 0.5rem; font-size: 0.98rem; font-weight: 600; }
+article p { margin: 0.7rem 0; }
+article ul, article ol { margin: 0.6rem 0; padding-left: 1.5rem; }
+article li { margin: 0.25rem 0; }
+article li > ul, article li > ol { margin: 0.2rem 0; }
+article strong { font-weight: 600; }
+article hr { border: 0; border-top: 1px solid var(--border); margin: 2.4rem 0; }
+blockquote { margin: 1.2rem 0; padding: 0.8rem 1.1rem; border-left: 3px solid var(--accent); background: var(--accent-soft); color: var(--muted); border-radius: 0 6px 6px 0; }
+blockquote p { margin: 0.25rem 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85em; background: var(--code-bg); color: var(--code-text); padding: 0.12em 0.38em; border-radius: 4px; }
+pre { margin: 1.1rem 0; padding: 1rem 1.15rem; overflow-x: auto; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; line-height: 1.55; }
+pre code { padding: 0; background: transparent; font-size: 0.8rem; white-space: pre; }
+.table-wrap { margin: 1.1rem 0; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 0.84rem; line-height: 1.6; }
+th, td { padding: 0.6rem 0.75rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+th { background: var(--th-bg); font-weight: 600; color: var(--text); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+.footer { max-width: 860px; margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.75rem; line-height: 1.7; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: 1rem; z-index: 10; padding: 0.4rem 0.7rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.backtop { position: fixed; right: 1.4rem; bottom: 1.4rem; width: 2.2rem; height: 2.2rem; display: grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface); color: var(--muted); box-shadow: var(--shadow); font-size: 0.95rem; }
+.backtop:hover { color: var(--text); text-decoration: none; }
+@media (max-width: 1000px) {
+  .page { display: block; }
+  .sidebar { position: static; height: auto; padding: 1.5rem 1.25rem; border-right: 0; border-bottom: 1px solid var(--border); }
+  nav.toc ul ul { margin-left: 0.4rem; }
+  .sidebar-meta { display: none; }
+  .content { padding: 2.2rem 1.25rem 3rem; }
+  .meta { grid-template-columns: 1fr 1fr; }
+}
+@media print {
+  @page { margin: 16mm 14mm; }
+  body { background: #fff; color: #000; font-size: 10.5pt; }
+  .page { display: block; max-width: none; }
+  .sidebar, .backtop, .skip { display: none; }
+  .content { padding: 0; }
+  article, .cover { max-width: none; }
+  .cover { border-bottom: 1px solid #ccc; }
+  article h2 { page-break-after: avoid; border-top-color: #ccc; }
+  pre, .table-wrap, blockquote { page-break-inside: avoid; }
+  a { color: inherit; text-decoration: none; }
+}
+</style>
+</head>
+<body id="top">
+<a class="skip" href="#main">跳到正文</a>
+<div class="page">
+  <aside class="sidebar">
+    <div class="brand">Multica<strong>设计方案</strong></div>
+    <div class="toc-label">目录</div>
+    <nav class="toc" aria-label="目录">
+      <ul><li><a href="#1">1. 摘要</a></li><li><a href="#2-multica-agent">2. 现状：Multica 现在如何把任务交给 agent</a><ul><li><a href="#21">2.1 触发路径（全部是硬编码）</a></li><li><a href="#22">2.2 执行路径</a></li><li><a href="#23">2.3 当前能力边界</a></li></ul></li><li><a href="#3">3. 目标与非目标</a><ul><li><a href="#31">3.1 第一版目标</a></li><li><a href="#32">3.2 非目标（本方案明确不做）</a></li></ul></li><li><a href="#4">4. 核心模型</a><ul><li><a href="#41">4.1 概念</a></li><li><a href="#42">4.2 阶段类型</a></li><li><a href="#43">4.3 状态机</a></li><li><a href="#44">4.4 与现有实体的关系</a></li></ul></li><li><a href="#5">5. 关键设计决策</a><ul><li><a href="#51-d4">5.1 关于 D4 的补充</a></li><li><a href="#52">5.2 关于阶段指令</a></li></ul></li><li><a href="#6">6. 数据模型（示意）</a><ul><li><a href="#61">6.1 表结构</a></li><li><a href="#62-jsonb">6.2 为什么定义存 JSONB</a></li><li><a href="#63">6.3 幂等与并发</a></li><li><a href="#64">6.4 现有唯一索引带来的约束</a></li></ul></li><li><a href="#7">7. 执行引擎</a><ul><li><a href="#71">7.1 代码落点（建议）</a></li><li><a href="#72-run">7.2 启动 run</a></li><li><a href="#73">7.3 派发阶段</a></li><li><a href="#74">7.4 推进</a></li><li><a href="#75">7.5 失败、重试、超时</a></li><li><a href="#76-reconciler">7.6 对账（reconciler）</a></li><li><a href="#77">7.7 与现有行为的交互矩阵</a></li><li><a href="#78">7.8 暂停与取消</a></li></ul></li><li><a href="#8-agent">8. Agent 协议与阶段上下文</a><ul><li><a href="#81-agent">8.1 阶段信息如何到达 agent</a></li><li><a href="#82">8.2 完成信号的限制</a></li><li><a href="#83-worktree">8.3 代码交付物与 worktree 限制（重要）</a></li></ul></li><li><a href="#9">9. 人工审批与通知</a><ul><li><a href="#91">9.1 审批人配置</a></li><li><a href="#92">9.2 通知</a></li><li><a href="#93">9.3 审批结果</a></li></ul></li><li><a href="#10-api">10. API 设计（示意）</a><ul><li><a href="#101">10.1 模板管理</a></li><li><a href="#102">10.2 运行</a></li><li><a href="#103">10.3 事件</a></li><li><a href="#104-cli">10.4 CLI（后续）</a></li></ul></li><li><a href="#11">11. 前端与交互</a><ul><li><a href="#111">11.1 导航</a></li><li><a href="#112-workflows">11.2 Workflows 页面</a></li><li><a href="#113-issue">11.3 Issue 详情</a></li><li><a href="#114-inbox">11.4 Inbox</a></li><li><a href="#115">11.5 设计约束</a></li></ul></li><li><a href="#12">12. 权限、安全与多租户</a></li><li><a href="#13">13. 可观测性</a></li><li><a href="#14">14. 分阶段落地</a></li><li><a href="#15">15. 测试策略</a></li><li><a href="#16">16. 风险</a></li><li><a href="#17">17. 待确认问题（需要产品或维护者决策）</a></li><li><a href="#18">18. 本版的明确缺口</a></li><li><a href="#19">19. 代码索引（写实现前先读）</a></li><li><a href="#a-definition">附录 A：示例 definition</a></li><li><a href="#b">附录 B：一次典型运行时序</a></li></ul>
+    </nav>
+    <div class="sidebar-meta">
+      v0.1 草案 · 明确不完整<br>
+      2026-11-06<br>
+      不含实现
+    </div>
+  </aside>
+  <main class="content" id="main">
+    <header class="cover">
+      <div class="eyebrow">Multica · Design Proposal</div>
+      <h1>工作流编排设计方案</h1>
+      <p class="subtitle">Workflow Orchestration · 第一版方案讨论稿</p>
+      <div class="badges">
+        <span class="badge">v0.1 草案</span>
+        <span class="badge warn">明确不完整</span>
+        <span class="badge">不含实现</span>
+        <span class="badge">仅方案讨论</span>
+      </div>
+      <dl class="meta">
+        <div><dt>日期</dt><dd>2026-11-06</dd></div>
+        <div><dt>来源</dt><dd>Issue #1 · PR #7</dd></div>
+        <div><dt>状态</dt><dd>等待评审与产品决策</dd></div>
+      </dl>
+      <div class="notice">
+        本文件只用于第一轮方案讨论，不包含实现，也不代表已批准的范围。表结构、API 与字段名均为示意，评审后可能调整；待确认问题见正文第 17 节。
+      </div>
+    </header>
+    <article>
+<h2 id="1">1. 摘要</h2>
+<p>Multica 目前的基本单位是「一个 issue 交给一个 agent 做完」。工作流编排要把它升级为「一个 issue 按可复用的阶段（stage）流转」：每个阶段由指定的 agent 或人执行，阶段之间自动交接，可以插入人工审批门，整个过程在 issue 详情里可见、可暂停、可取消。</p>
+<p>本版方案的核心建议：</p>
+<ol>
+<li><strong>第一版只做单 issue 的线性流程</strong>，不做通用 DAG、不做跨 issue 编排、不做可视化画布。</li>
+<li><strong>复用现有的 <code>agent_task_queue</code> 和 <code>TaskService</code></strong>，不引入新的任务执行基础设施；工作流只负责「下一步派给谁、什么时候派」。</li>
+<li><strong>run 启动时快照流程定义</strong>，模板后续修改不影响正在运行的实例。</li>
+<li><strong>人工审批是一等阶段</strong>，通过 inbox 通知 + issue 内操作完成，而不是靠评论约定。</li>
+<li><strong>与现有触发器的交互必须先定清楚</strong>（见 D4 与 7.7），这是本方案风险最高的部分。</li>
+</ol>
+<p>本版<strong>没有</strong>回答的问题集中在第 17 节，需要产品决策后才能进入实现。</p>
+<hr />
+<h2 id="2-multica-agent">2. 现状：Multica 现在如何把任务交给 agent</h2>
+<h3 id="21">2.1 触发路径（全部是硬编码）</h3>
+<p>当前没有「触发器配置」这一层，三个入口直接写在 handler 里：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>触发场景</th>
+<th>代码位置</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>issue 被分配给 agent（创建时或改派时）</td>
+<td><code>server/internal/handler/issue.go:1129</code> → <code>shouldEnqueueAgentTask</code></td>
+<td>只校验 assignee 是未归档、有 runtime 的 agent，不校验 issue 状态，直接入队</td>
+</tr>
+<tr>
+<td>成员在 issue 下评论</td>
+<td><code>server/internal/handler/comment.go:263</code>（调用 <code>issue.go:1136</code> 的 <code>shouldEnqueueOnComment</code>）</td>
+<td>非终态（done/cancelled）且没有 pending 任务时，给 assignee agent 入队</td>
+</tr>
+<tr>
+<td>评论里 @mention 某个 agent</td>
+<td><code>server/internal/handler/comment.go:369</code> 起</td>
+<td>为被 mention 的 agent 入队；跳过自己、无 runtime、已归档、无权限的私有 agent</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>server/migrations/032_drop_agent_triggers.up.sql</code> 的注释写得很清楚：<code>on_assign / on_comment / on_mention</code> 现在<strong>始终开启，不可配置</strong>。</p>
+<h3 id="22">2.2 执行路径</h3>
+<ol>
+<li>handler 调用 <code>TaskService.EnqueueTaskForIssue</code> / <code>EnqueueTaskForMention</code>（<code>server/internal/service/task.go:36</code>、<code>:80</code>）创建 <code>agent_task_queue</code> 记录。</li>
+<li>daemon 通过 <code>POST /api/daemon/runtimes/{runtimeId}/tasks/claim</code> 领取任务（<code>server/internal/handler/daemon.go:341</code>）。领取响应包含 agent 的 instructions、skills、工作区仓库、以及同一 (agent, issue) 的 prior session（用于续接会话）。</li>
+<li>daemon 用 <code>BuildPrompt</code> 生成极短的 prompt（<code>server/internal/daemon/prompt.go:11</code>）：只告诉 agent issue ID，让它自己执行 <code>multica issue get &lt;id&gt; --output json</code> 拉取详情。</li>
+<li>任务完成/失败通过 <code>CompleteTask</code> / <code>FailTask</code> 落库；<strong>服务端不修改 issue 状态</strong>，状态由 agent 通过 CLI 自己改（<code>server/internal/service/task.go:232</code>、<code>:244</code>、<code>:324</code>）。</li>
+<li>任务队列对同一个 (issue, agent) 做串行化，不同 agent 可以并行处理同一个 issue（<code>server/pkg/db/queries/agent.sql</code> 的 <code>ClaimAgentTask</code>）。</li>
+</ol>
+<h3 id="23">2.3 当前能力边界</h3>
+<ol>
+<li><strong>单主线</strong>：一个 issue 只有一个 assignee。多 agent 接力只能靠人改派或 @mention，无法表达「先实现、再评审、再验收」。</li>
+<li><strong>触发不可配置</strong>：无法按项目、标签、issue 类型定义不同的入口。</li>
+<li><strong>没有阶段概念</strong>：任务完成不会驱动任何后续动作；服务端不知道「这件事做到哪一步了」。</li>
+<li><strong>没有等待人的状态</strong>：inbox 有通知，但没有「流程停在某个审批节点、等待某人动作」的持久对象。</li>
+<li><strong>没有失败策略</strong>：任务失败即结束，没有重试、超时升级、回退。</li>
+<li><strong>交接上下文弱</strong>：任务 prompt 只含 issue ID，跨 agent 没有结构化的交付物契约。</li>
+<li><strong>可观测性只有 task 维度</strong>：没有 run/stage 维度的进度、耗时、失败原因聚合。</li>
+</ol>
+<hr />
+<h2 id="3">3. 目标与非目标</h2>
+<h3 id="31">3.1 第一版目标</h3>
+<ul>
+<li>workspace 内可以创建、编辑、启用/停用<strong>可复用的线性流程模板</strong>。</li>
+<li>在某个 issue 上启动一次 run，引擎按阶段自动派发：agent 阶段创建 agent 任务，member 阶段指派成员，approval 阶段等待审批。</li>
+<li>agent 任务完成/失败能驱动阶段推进；失败可重试或暂停。</li>
+<li>issue 详情能看到当前阶段、阶段历史、当前执行者，并能暂停/恢复/取消/审批。</li>
+<li>所有动作进入现有 activity/timeline 和 inbox 通知体系。</li>
+<li>完全遵守现有 workspace 多租户、权限和 agent 可见性规则。</li>
+</ul>
+<p>第一版的验收场景（用于判断方案是否落地成功）：</p>
+<blockquote>
+<p>在 issue 上启动「实现（agent A）→ 人工验收（approval）」两步流程，或「实现（agent A）→ 同 agent 复核 → 人工验收」三步流程，无需人工改派即可走完；中途可以暂停、取消；任一步失败在 issue 内可见，并能重试。跨 agent 的代码交接见 8.3，属于后续阶段。</p>
+</blockquote>
+<h3 id="32">3.2 非目标（本方案明确不做）</h3>
+<ul>
+<li>通用自动化规则引擎（if-this-then-that、任意 trigger/action 组合）。</li>
+<li>任意 DAG、并行分支、条件分支的可视化画布。</li>
+<li>跨 issue 的编排（例如父 issue 自动展开子 issue 并汇总结果）。</li>
+<li>外部系统集成、webhook、cron 定时触发。</li>
+<li>跨 workspace 的模板共享或模板市场。</li>
+<li>修改现有「分配/评论/mention」默认行为（除 D4 明确要求的部分）。</li>
+<li>计费、配额、按工作流结算。</li>
+</ul>
+<hr />
+<h2 id="4">4. 核心模型</h2>
+<h3 id="41">4.1 概念</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>说明</th>
+<th>与现有实体的关系</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Workflow（流程模板）</strong></td>
+<td>workspace 级的可复用定义，包含有序阶段列表</td>
+<td>新表 <code>workflow</code></td>
+</tr>
+<tr>
+<td><strong>Stage（阶段）</strong></td>
+<td>定义中的一步：执行者、指令、失败策略</td>
+<td>存在 <code>workflow.definition</code> JSONB 中</td>
+</tr>
+<tr>
+<td><strong>Run（运行实例）</strong></td>
+<td>模板在某个 issue 上的一次执行</td>
+<td>绑定一个 issue；启动时快照 definition</td>
+</tr>
+<tr>
+<td><strong>Stage Run（阶段执行）</strong></td>
+<td>一次阶段执行，包含尝试次数、关联任务、结果</td>
+<td>新表 <code>workflow_stage_run</code></td>
+</tr>
+<tr>
+<td><strong>Gate（审批门）</strong></td>
+<td>一种阶段类型：等待指定的人 approve/reject</td>
+<td>阶段类型 <code>approval</code></td>
+</tr>
+<tr>
+<td><strong>Trigger（启动方式）</strong></td>
+<td>手动启动；后续可扩展自动启动</td>
+<td>第一版只做手动</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="42">4.2 阶段类型</h3>
+<p>第一版只有三种，够覆盖「agent 干活 → 人复核」的主场景：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>类型</th>
+<th>执行者</th>
+<th>引擎行为</th>
+<th>完成信号</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent</code></td>
+<td>指定 agent</td>
+<td>创建 <code>agent_task_queue</code> 任务，并把 issue assignee 指向该 agent（见 D6）</td>
+<td>关联任务 <code>completed</code></td>
+</tr>
+<tr>
+<td><code>member</code></td>
+<td>指定 workspace 成员</td>
+<td>指派 issue 给该成员，创建 inbox 通知</td>
+<td>成员在 issue 里点「完成此阶段」</td>
+</tr>
+<tr>
+<td><code>approval</code></td>
+<td>指定成员 / workspace 管理员</td>
+<td>不派发任务，创建 inbox 审批通知，阶段进入 <code>waiting_approval</code></td>
+<td>审批人点「通过 / 驳回」</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="43">4.3 状态机</h3>
+<pre><code>workflow_run
+  pending ──▶ running ──▶ completed
+                │  ▲
+                │  └──── paused（人工暂停 / 失败后暂停 / 等待决策）
+                ├──────▶ failed
+                └──────▶ cancelled
+</code></pre>
+<pre><code>workflow_stage_run
+  pending ──▶ running ──▶ completed ──▶ (下一阶段)
+                │              │
+                │              └── 最后一个阶段完成 → run completed
+                ├──▶ waiting_approval ──▶ completed / failed
+                ├──▶ failed ──▶ 按失败策略：retry（attempt + 1）| pause run | fail run
+                └──▶ cancelled
+</code></pre>
+<p>约束：</p>
+<ul>
+<li>同一时刻一个 run 只有一个 <code>running</code>/<code>waiting_approval</code> 阶段。</li>
+<li>同一时刻一个 issue 最多一个活跃 run（<code>pending/running/paused</code>）。由部分唯一索引保证。</li>
+<li>阶段定义是<strong>线性有序数组</strong>，第一版没有回边（不能从评审回到实现）。驳回行为见 9.3，第一版建议驳回 = run <code>failed</code>，修正后重新启动一个 run。</li>
+</ul>
+<h3 id="44">4.4 与现有实体的关系</h3>
+<pre><code>workspace
+ └─ workflow（模板，definition JSONB）
+      └─ workflow_run（快照，绑定 1 个 issue）
+           ├─ workflow_stage_run #1 ── agent_task_queue（agent 阶段）
+           ├─ workflow_stage_run #2 ── agent_task_queue（agent 阶段）
+           └─ workflow_stage_run #3 ── inbox_item（approval 阶段）
+
+issue ──1:N── workflow_run（历史 run 保留；同一时刻最多 1 个活跃 run）
+agent_task_queue.workflow_stage_run_id ──▶ workflow_stage_run.id（可空，普通任务为 NULL）
+activity_log：复用现有表，新增 action 字符串（workflow_started / stage_changed / workflow_completed / ...）
+inbox_item：复用现有表，新增 type（workflow_approval_requested / workflow_run_failed / ...）
+</code></pre>
+<hr />
+<h2 id="5">5. 关键设计决策</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>决策</th>
+<th>建议</th>
+<th>备选</th>
+<th>理由 / 代价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td>编排对象</td>
+<td>单 issue 线性流程</td>
+<td>跨 issue DAG / 通用规则引擎</td>
+<td>复用 issue 详情、任务队列、评论和权限体系；DAG 和跨 issue 需要新的「容器」概念，第一版性价比低</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>谁推进阶段</td>
+<td>agent 阶段由任务完成自动推进；member/approval 阶段由人操作推进；agent 不能直接改 run 状态</td>
+<td>全部人工推进 / agent 用 CLI 显式推进</td>
+<td>自动推进才有价值；显式 verdict 需要新的 CLI + 协议，放到后续</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>阶段完成信号</td>
+<td>第一版 = 关联任务 <code>completed</code></td>
+<td>解析 agent 输出 / 评论指令 / 显式 verdict</td>
+<td>最简单且可靠；缺点是「任务跑完」不等于「结果合格」，用 approval 阶段兜底</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>与现有触发器的关系</td>
+<td>run 活跃期间，工作流接管该 issue 的 agent 派发；仅暂停 <code>on_assign</code> 自动入队，评论/mention 触发保留</td>
+<td>完全不改触发器，工作流额外派发</td>
+<td>不改会重复建任务（工作流改 assignee 会触发 <code>on_assign</code>）；该决策影响现有行为，需要确认</td>
+</tr>
+<tr>
+<td>D5</td>
+<td>版本化</td>
+<td>run 启动时把 definition 快照进 <code>workflow_run.definition_snapshot</code>，不做独立 version 表</td>
+<td>模板版本表 + 发布流程</td>
+<td>编辑中的模板不影响运行中的实例；代价是无法「统一升级」旧 run</td>
+</tr>
+<tr>
+<td>D6</td>
+<td>运行期间的 assignee</td>
+<td>跟随当前阶段执行者（agent 或 member）</td>
+<td>保持用户原本的 assignee</td>
+<td>assignee 是最直观的「现在谁在做」；代价是可能与用户手动改派冲突，见 7.7</td>
+</tr>
+<tr>
+<td>D7</td>
+<td>阶段交付物</td>
+<td>第一版用 task result（<code>output</code>）+ issue 评论；跨 agent 代码交接单独处理</td>
+<td>结构化 artifact 表 + 文件/分支协议</td>
+<td>结构化交付物需要定义 schema 和 UI；先把主链路跑通</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="51-d4">5.1 关于 D4 的补充</h3>
+<p>这是本方案最需要先确认的技术决策。当前「改派给 agent」会入队（<code>issue.go:1081-1088</code>），「分配变更」还会先 <code>CancelTasksForIssue</code>。如果工作流在派发阶段时直接改 assignee，就会：</p>
+<ol>
+<li>触发一次重复任务；</li>
+<li>或者在下一步改派时把当前阶段的任务取消掉。</li>
+</ol>
+<p>可选方案：</p>
+<ul>
+<li><strong>A（建议）</strong>：工作流派发通过 service 直接更新 issue（不经过 handler 的触发逻辑）；同时给 <code>shouldEnqueueAgentTask</code> 增加「该 issue 有活跃 run 则跳过」的判断。行为变化仅限已启动工作流的 issue；评论/mention 触发不受影响。</li>
+<li><strong>B</strong>：不修改 assignee，只在 UI 上显示阶段执行者。改动最小，但「issue 当前由谁负责」会变得不直观。</li>
+<li><strong>C</strong>：给任务增加 origin 字段，触发逻辑只跳过 <code>origin=workflow</code> 的任务。更精细，但需要改任务表和查询。</li>
+</ul>
+<p>第一版建议 A；如果产品希望「assignee 始终由人控制」，则选 B。</p>
+<h3 id="52">5.2 关于阶段指令</h3>
+<p>阶段需要告诉 agent「这一步做什么」。两种承载方式：</p>
+<ul>
+<li><strong>存进任务上下文</strong>（推荐）：<code>agent_task_queue.context</code> 已存在（<code>003_task_context.up.sql</code>），但当前 daemon 不使用它。扩展 claim 响应，把阶段信息传给 daemon，由 <code>BuildPrompt</code> 注入。</li>
+<li><strong>写进 issue 评论/描述</strong>：不需要改 daemon，但会污染用户内容、难以区分系统指令，且 agent 可能忽略。不推荐作为主方案。</li>
+</ul>
+<hr />
+<h2 id="6">6. 数据模型（示意）</h2>
+<blockquote>
+<p>以下 SQL 是设计示意，不是最终迁移文件。字段名、约束、索引都需要在实现阶段复核。</p>
+</blockquote>
+<h3 id="61">6.1 表结构</h3>
+<pre><code class="language-sql">-- 流程模板
+CREATE TABLE workflow (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id UUID NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    -- {&quot;stages&quot;:[{key,name,kind,actor_type,actor_id,instructions,on_failure,timeout_seconds,on_complete}]}
+    definition JSONB NOT NULL DEFAULT '{&quot;stages&quot;:[]}',
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    deleted_at TIMESTAMPTZ,
+    created_by_type TEXT NOT NULL CHECK (created_by_type IN ('member','system')),
+    created_by_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_workflow_workspace ON workflow(workspace_id) WHERE deleted_at IS NULL;
+
+-- 运行实例
+CREATE TABLE workflow_run (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id UUID NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+    workflow_id UUID NOT NULL REFERENCES workflow(id) ON DELETE RESTRICT,
+    issue_id UUID NOT NULL REFERENCES issue(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','running','paused','completed','failed','cancelled')),
+    current_stage_key TEXT,
+    definition_snapshot JSONB NOT NULL,
+    started_by_type TEXT NOT NULL CHECK (started_by_type IN ('member','system')),
+    started_by_id UUID,
+    error TEXT,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 同一 issue 最多一个活跃 run
+CREATE UNIQUE INDEX uq_workflow_run_active_issue
+    ON workflow_run(issue_id)
+    WHERE status IN ('pending','running','paused');
+CREATE INDEX idx_workflow_run_issue ON workflow_run(issue_id, created_at DESC);
+
+-- 阶段执行
+CREATE TABLE workflow_stage_run (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id UUID NOT NULL REFERENCES workflow_run(id) ON DELETE CASCADE,
+    stage_key TEXT NOT NULL,
+    stage_index INT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('agent','member','approval')),
+    actor_type TEXT CHECK (actor_type IN ('member','agent')),
+    actor_id UUID,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','running','waiting_approval','completed','failed','skipped','cancelled')),
+    attempt INT NOT NULL DEFAULT 1,
+    instructions TEXT,
+    result JSONB,
+    error TEXT,
+    next_attempt_at TIMESTAMPTZ,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (run_id, stage_key, attempt)
+);
+CREATE INDEX idx_stage_run_run ON workflow_stage_run(run_id, stage_index);
+-- 同一个 run 同时只能有一个执行中的阶段
+CREATE UNIQUE INDEX uq_stage_run_active_per_run
+    ON workflow_stage_run(run_id)
+    WHERE status IN ('running','waiting_approval');
+
+-- 任务关联（只在一个方向存，避免双写）
+ALTER TABLE agent_task_queue
+    ADD COLUMN workflow_stage_run_id UUID REFERENCES workflow_stage_run(id) ON DELETE SET NULL;
+CREATE INDEX idx_agent_task_queue_workflow_stage
+    ON agent_task_queue(workflow_stage_run_id)
+    WHERE workflow_stage_run_id IS NOT NULL;
+</code></pre>
+<h3 id="62-jsonb">6.2 为什么定义存 JSONB</h3>
+<ul>
+<li>模板编辑是整体保存，阶段不需要被其他表外键引用。</li>
+<li>定义天然需要随版本演进；run 只需要快照。</li>
+<li>校验放在 API 层（阶段数量上限、key 唯一、kind 合法、actor 必须存在且有权限、不能有环——线性数组天然无环）。</li>
+</ul>
+<p>代价：无法用 SQL 查询「哪些模板含某个 agent 的阶段」。第一版不需要；如果后续需要，可以在 run 维度建索引或额外落一张 <code>workflow_stage</code> 投影表。</p>
+<h3 id="63">6.3 幂等与并发</h3>
+<ul>
+<li><code>uq_workflow_run_active_issue</code> 防止同一 issue 重复启动。</li>
+<li><code>UNIQUE (run_id, stage_key, attempt)</code> 防止同一阶段重复推进。</li>
+<li><code>uq_stage_run_active_per_run</code> 防止一个 run 同时出现两个执行中的阶段。</li>
+<li>所有状态迁移用条件更新：<code>UPDATE workflow_stage_run SET status='completed' WHERE id=$1 AND status='running'</code>，受影响行数为 0 说明已被其他路径处理。</li>
+<li>对账/推进任务用 <code>SELECT ... FOR UPDATE SKIP LOCKED</code>，避免多实例重复处理（当前是单实例部署，但数据库层约束应提前做好）。</li>
+</ul>
+<h3 id="64">6.4 现有唯一索引带来的约束</h3>
+<p><code>agent_task_queue</code> 上有 <code>idx_one_pending_task_per_issue_agent</code>（<code>037_fix_pending_task_unique_index.up.sql</code>）：同一 (issue, agent) 只能有一个 queued/dispatched 任务。工作流重试时如果该 agent 已有一个排队的评论任务，直接入队会冲突。处理方式：</p>
+<ul>
+<li>派发失败（唯一约束冲突）时，阶段保持 <code>pending</code>，设置 <code>next_attempt_at</code>，交给 reconciler 稍后重试；</li>
+<li>或者复用已有的 pending 任务（需要任务能表达「这次执行同时属于某阶段」，实现更复杂）。</li>
+</ul>
+<p>第一版建议前者，并在日志中记录冲突原因。</p>
+<hr />
+<h2 id="7">7. 执行引擎</h2>
+<h3 id="71">7.1 代码落点（建议）</h3>
+<pre><code>server/internal/workflow/          # 纯领域逻辑：定义校验、状态机、下一阶段计算（无 DB 依赖，易测试）
+server/internal/service/workflow.go # WorkflowService：事务、调用 TaskService、写 activity、发事件
+server/cmd/server/workflow_listeners.go    # 订阅 task:completed / task:failed / issue 事件
+server/cmd/server/workflow_reconciler.go   # 定时对账，修复丢失的推进
+server/cmd/server/router.go        # 新增路由
+</code></pre>
+<p>复用现有结构：<code>TaskService</code> 在 <code>server/cmd/server/main.go</code> 里创建，workflow service 持有 <code>*db.Queries</code>、<code>*TaskService</code>、<code>*events.Bus</code>。</p>
+<h3 id="72-run">7.2 启动 run</h3>
+<ol>
+<li>API 校验：workflow 属于当前 workspace、enabled、定义合法、issue 无活跃 run、调用者有权限、阶段里的 agent 对调用者可见且可分配。</li>
+<li>事务内插入 <code>workflow_run</code>（快照 definition）和第一个 <code>workflow_stage_run</code>。</li>
+<li>事务提交后派发第一阶段（见 7.3），发布 <code>workflow:run_updated</code>。</li>
+<li>记录 activity <code>workflow_started</code>。</li>
+</ol>
+<p>失败处理：派发失败不回滚 run，run 进入 <code>paused</code> 并带 <code>error</code>，由人处理；这样不会出现「run 存在但无法看到的中间态」。</p>
+<h3 id="73">7.3 派发阶段</h3>
+<p><strong>agent 阶段</strong>：</p>
+<ol>
+<li>校验 agent 未归档、有 runtime。</li>
+<li>调用新增的 <code>TaskService.EnqueueTaskForAgent(ctx, issue, agentID, workflowStageRunID, priority)</code>：
+   - 与 <code>EnqueueTaskForMention</code> 类似，但显式接收 agent 和阶段 ID；
+   - 创建任务时写入 <code>workflow_stage_run_id</code>；
+   - 现有 <code>CreateAgentTask</code> 需要增加可空参数（sqlc 重新生成）。</li>
+<li>按 D6 更新 issue assignee 为该 agent（建议走直接 update，不触发 handler 的入队逻辑）。</li>
+<li>阶段置 <code>running</code>，记录 <code>started_at</code>。</li>
+<li>发布 WS 事件，activity 记录 <code>workflow_stage_started</code>。</li>
+</ol>
+<p><strong>member 阶段</strong>：</p>
+<ol>
+<li>更新 issue assignee 为该成员（不会触发 agent 自动任务）。</li>
+<li>阶段置 <code>running</code>。</li>
+<li>创建 inbox 通知（<code>workflow_stage_assigned</code>），链接到 issue 和阶段。</li>
+</ol>
+<p><strong>approval 阶段</strong>：</p>
+<ol>
+<li>阶段置 <code>waiting_approval</code>。</li>
+<li>按审批人配置创建 inbox 通知（<code>workflow_approval_requested</code>，severity=<code>action_required</code>）。</li>
+<li>等待 <code>POST /workflow-runs/{id}/stages/{stageRunId}/approve|reject</code>。</li>
+</ol>
+<h3 id="74">7.4 推进</h3>
+<p>推荐做法：<code>WorkflowService</code> 订阅 <code>task:completed</code> / <code>task:failed</code>（现有事件总线，进程内同步），并根据任务的 <code>workflow_stage_run_id</code> 判断是否需要推进。</p>
+<ul>
+<li><code>task:completed</code>：</li>
+<li>条件更新阶段为 <code>completed</code>（仅当当前是 <code>running</code> 且 attempt 匹配）；</li>
+<li>保存 <code>result</code>（取自任务的 result）；</li>
+<li>计算下一阶段，事务内创建下一阶段的 <code>workflow_stage_run</code>（<code>pending</code>）；没有下一阶段则 run <code>completed</code>，按定义设置 issue 状态（建议默认 <code>done</code>，见第 17 节第 6 条）；状态变更必须走与 handler 相同的发布路径（<code>issue:updated</code> + activity + 订阅者通知），不能只写库，否则前端和通知不会更新；</li>
+<li>事务提交后派发下一阶段；派发失败时阶段保持 <code>pending</code>（设置 <code>next_attempt_at</code>），由 reconciler 重试；</li>
+<li>写 activity；发 WS。</li>
+<li><code>task:failed</code>：</li>
+<li>按阶段 <code>on_failure</code> 策略处理：<ul>
+<li><code>retry</code>：<code>attempt + 1</code>，新建一条 stage_run，设置 <code>next_attempt_at</code>（建议 30s 起，指数退避），由 reconciler 派发；</li>
+<li><code>pause</code>（默认）：run 置 <code>paused</code>，记录 error，inbox 通知发起人；</li>
+<li><code>fail</code>：run 置 <code>failed</code>。</li>
+</ul>
+</li>
+<li><code>task:cancelled</code>：等同失败，但 error 为「任务被取消」，默认 <code>pause</code>。</li>
+</ul>
+<p>为什么走事件而不是在 <code>TaskService.CompleteTask</code> 里直接调用：保持 TaskService 只关心任务生命周期；事件订阅与 activity/notification 的现有模式一致（<code>server/cmd/server/activity_listeners.go</code>）。风险是事件总线是<strong>进程内同步、best-effort</strong>（<code>server/internal/events/bus.go</code>），进程崩溃会丢事件。因此必须有 7.6 的对账。</p>
+<h3 id="75">7.5 失败、重试、超时</h3>
+<ul>
+<li>每个阶段定义 <code>on_failure: {strategy: retry|pause|fail, max_attempts: 1..3}</code>，默认 <code>pause</code>。</li>
+<li>阶段级超时：复用现有任务超时（<code>FailStaleTasks</code>）+ 阶段自身的 <code>timeout_seconds</code>，由 reconciler 检查「running 超过阈值且任务不活跃」。</li>
+<li>重试保留历史 stage_run（attempt 递增），UI 展示尝试次数。</li>
+<li>agent 被归档/删除 runtime：派发失败 → 按 <code>pause</code> 处理，inbox 通知发起人。</li>
+</ul>
+<h3 id="76-reconciler">7.6 对账（reconciler）</h3>
+<p>必须做，不建议只靠事件。每 30–60 秒扫描：</p>
+<ol>
+<li>run 是 <code>running</code>，当前阶段是 <code>running</code>，但关联任务已 <code>completed/failed/cancelled</code> → 补推进。</li>
+<li>阶段是 <code>pending</code> 且 <code>next_attempt_at &lt;= now()</code> → 补派发。</li>
+<li>阶段 <code>running</code> 但没有关联任务且超过 N 秒 → 标记失败/暂停。</li>
+<li>run 是 <code>running</code>，当前阶段（<code>current_stage_key</code>）已 <code>completed</code>，但不存在后续阶段执行记录 → 补建/补派发；</li>
+<li>run 是 <code>paused</code> 但 <code>error</code> 为空（异常状态）→ 记录并告警。</li>
+</ol>
+<p>现有 <code>runRuntimeSweeper</code>（<code>server/cmd/server/runtime_sweeper.go</code>）是可参考的 ticker 模式。多实例部署时用 <code>FOR UPDATE SKIP LOCKED</code>。</p>
+<h3 id="77">7.7 与现有行为的交互矩阵</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>现有行为</th>
+<th>run 活跃时会发生什么</th>
+<th>建议处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>人工把 issue 改派给另一个 agent</td>
+<td><code>issue.go:1081-1088</code> 会 <code>CancelTasksForIssue</code>，取消当前阶段任务；随后为新 assignee 入队（采用 D4-A 时不会入队）</td>
+<td>工作流监听 <code>task:cancelled</code>，把阶段标记失败并 <code>pause</code> run；避免自动重新派发造成「人已接管但工作流继续」</td>
+</tr>
+<tr>
+<td>人工改派给成员</td>
+<td>取消阶段任务（如果是 agent 阶段），新 assignee 无任务</td>
+<td>同上；或检测到 assignee 变更时直接 <code>pause</code> run</td>
+</tr>
+<tr>
+<td>成员在 issue 评论</td>
+<td>给 assignee（可能是当前阶段 agent）入队；若已有 pending 则合并</td>
+<td>保留：这是人工追问，不应当被工作流吞掉；注意它会在阶段完成后多跑一次</td>
+</tr>
+<tr>
+<td>成员 @mention 其他 agent</td>
+<td>给被 mention 的 agent 入队</td>
+<td>保留；与工作流并行，可能产生额外评论</td>
+</tr>
+<tr>
+<td>取消任务</td>
+<td>阶段关联任务被取消</td>
+<td>阶段失败 → 默认 <code>pause</code>，通知发起人</td>
+</tr>
+<tr>
+<td>归档 agent / 删除 runtime</td>
+<td>后续派发失败</td>
+<td><code>pause</code> run + inbox 通知</td>
+</tr>
+<tr>
+<td>删除 issue</td>
+<td>FK CASCADE 删除 run；任务已由现有逻辑取消</td>
+<td>无需额外处理</td>
+</tr>
+<tr>
+<td>任务超时（<code>FailStaleTasks</code>）</td>
+<td>任务 failed</td>
+<td>走失败策略</td>
+</tr>
+<tr>
+<td>现有 <code>task:failed</code> 通知</td>
+<td>会同时给订阅者发通知</td>
+<td>按任务的 <code>workflow_stage_run_id</code> 判断，抑制或合并工作流阶段的失败通知，避免一次失败两条通知</td>
+</tr>
+</tbody>
+</table></div>
+<p>这个矩阵说明：<strong>工作流不能假设自己独占 issue</strong>。第一版应该把「run 期间的人为干预」当作一等场景，默认暂停而不是自动纠正。</p>
+<h3 id="78">7.8 暂停与取消</h3>
+<ul>
+<li><strong>暂停（soft）</strong>：当前阶段继续执行，阶段完成后 run 进入 <code>paused</code>，不再派发下一阶段。适合「我想先看看结果」。</li>
+<li><strong>立即停止（hard）</strong>：取消当前任务，阶段和 run 都置 <code>cancelled</code>。第一版用「取消 run」表达，不额外做「立即暂停」。</li>
+<li><strong>恢复</strong>：从 <code>paused</code> 继续，重新派发当前阶段（若阶段未完成）或进入下一阶段。</li>
+<li>取消不可恢复；只取消与本次 run 的阶段关联的任务（按 <code>workflow_stage_run_id</code>），不要用 issue 级别的 <code>CancelTasksForIssue</code>，避免误伤人工评论/mention 触发的任务。</li>
+</ul>
+<hr />
+<h2 id="8-agent">8. Agent 协议与阶段上下文</h2>
+<h3 id="81-agent">8.1 阶段信息如何到达 agent</h3>
+<p>建议扩展 daemon 的 claim 响应（<code>AgentTaskResponse</code>，<code>server/internal/handler/agent.go:75</code>）增加可选字段：</p>
+<pre><code class="language-json">{
+  &quot;workflow&quot;: {
+    &quot;run_id&quot;: &quot;...&quot;,
+    &quot;stage_run_id&quot;: &quot;...&quot;,
+    &quot;workflow_name&quot;: &quot;功能交付&quot;,
+    &quot;stage_key&quot;: &quot;implement&quot;,
+    &quot;stage_name&quot;: &quot;实现&quot;,
+    &quot;stage_index&quot;: 1,
+    &quot;stage_total&quot;: 3,
+    &quot;instructions&quot;: &quot;实现 issue 描述中的功能，提交代码并评论说明改动。&quot;,
+    &quot;is_last_stage&quot;: false
+  }
+}
+</code></pre>
+<p>daemon 在 <code>BuildPrompt</code> 中追加一段简短说明（不把长指令塞进 prompt，仍让 agent 用 CLI 拉全量）：</p>
+<pre><code>Workflow stage: 实现 (1/3) — 功能交付
+Stage instructions: &lt;instructions&gt;
+Do not change the issue status; the workflow advances it after this task completes.
+</code></pre>
+<p><code>multica issue get</code> 的 JSON 也建议带上当前 run/stage（后续阶段做），方便 agent 判断自己处于哪一步。</p>
+<h3 id="82">8.2 完成信号的限制</h3>
+<p>第一版「任务完成 = 阶段完成」有一个明显问题：agent 可能任务成功退出，但结果不合格（例如评审没发现问题）。本方案用 approval 阶段兜底，但更理想的是显式 verdict：</p>
+<pre><code>multica workflow complete-stage --task &lt;task-id&gt; --verdict pass|fail --note &quot;...&quot;
+</code></pre>
+<p>这会新增 daemon→server 的协议、CLI 命令和权限校验。第一版不做，列为后续增强；如果产品认为「评审 agent 必须给出 pass/fail」是核心，则必须提前到第一版（见第 17 节第 5 条）。</p>
+<h3 id="83-worktree">8.3 代码交付物与 worktree 限制（重要）</h3>
+<p>当前执行环境是 per (agent, issue) 的 worktree：</p>
+<ul>
+<li>daemon 复用同一 (agent, issue) 的 <code>work_dir</code>（<code>server/internal/daemon/daemon.go:927</code> 附近注释：不清理，供后续任务复用）。</li>
+<li>不同 agent 各自准备独立的 worktree 和分支（<code>server/internal/daemon/execenv/git.go</code>）。</li>
+<li><code>TaskResult</code> 已经预留了 <code>branch_name</code>（<code>server/internal/daemon/types.go:75</code>），daemon client 也会在非空时发送；但当前 <code>runTask</code> 没有填充它，<code>TaskCompleteRequest</code>（<code>server/internal/handler/daemon.go:514</code>）也没有接收该字段，所以分支信息实际上没有落库。</li>
+</ul>
+<p>这意味着<strong>实现 agent 的未提交改动，评审 agent 看不到</strong>；即使是已提交的分支，当前也没有传递链路。因此：</p>
+<ul>
+<li>如果阶段 1 是实现、阶段 2 是另一个 agent 评审，评审 agent 需要能 checkout 实现分支，或者实现 agent 必须 push 分支。</li>
+<li>第一版可选策略：</li>
+<li><strong>A</strong>：同一 agent 跑多个阶段（复用 workdir 和 session），跨 agent 只做 member/approval 阶段；</li>
+<li><strong>B</strong>：要求 agent 阶段提交并推送分支，补齐「daemon 上报 branch_name → server 存储 → 下一阶段 claim 响应带 <code>base_ref</code> → daemon 检出」这条链路；</li>
+<li><strong>C</strong>：阶段共享 workdir（不推荐，破坏 per-agent 会话隔离和并发）。</li>
+</ul>
+<p>建议第一版选 A（先把流程跑通），B 作为第二阶段；如果产品明确要求「实现 agent + 评审 agent」跨 agent 协作，则 B 必须提前，属于 daemon/execenv 的改动，范围会扩大。这是第 17 节第 4 条。</p>
+<hr />
+<h2 id="9">9. 人工审批与通知</h2>
+<h3 id="91">9.1 审批人配置</h3>
+<p>第一版建议支持三种（按优先级实现）：</p>
+<ol>
+<li>指定成员（<code>member_id</code>）；</li>
+<li>workspace 管理员/所有者（所有 admin/owner 都可审批，任一人通过即可）；</li>
+<li>issue 订阅者（新增或已有订阅者都可以）。</li>
+</ol>
+<p>默认用「指定成员」；「管理员」适合没有固定审批人的小团队。</p>
+<h3 id="92">9.2 通知</h3>
+<p>复用 <code>inbox_item</code> 和现有 notification listener 模式（<code>server/cmd/server/notification_listeners.go</code>）：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>type</th>
+<th>severity</th>
+<th>触发</th>
+<th>接收者</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>workflow_approval_requested</code></td>
+<td><code>action_required</code></td>
+<td>进入 approval 阶段</td>
+<td>审批人</td>
+</tr>
+<tr>
+<td><code>workflow_stage_assigned</code></td>
+<td><code>attention</code></td>
+<td>进入 member 阶段</td>
+<td>该成员</td>
+</tr>
+<tr>
+<td><code>workflow_run_paused</code></td>
+<td><code>attention</code></td>
+<td>失败/人工干预导致暂停</td>
+<td>run 发起人</td>
+</tr>
+<tr>
+<td><code>workflow_run_failed</code></td>
+<td><code>attention</code></td>
+<td>run 失败</td>
+<td>run 发起人</td>
+</tr>
+<tr>
+<td><code>workflow_run_completed</code></td>
+<td><code>info</code></td>
+<td>run 完成</td>
+<td>run 发起人</td>
+</tr>
+</tbody>
+</table></div>
+<p>第一版建议：只通知发起人和审批人，避免订阅者被流程噪音淹没；完成通知可以复用现有 issue 状态变更通知。</p>
+<h3 id="93">9.3 审批结果</h3>
+<ul>
+<li><strong>通过</strong>：阶段 <code>completed</code>，进入下一阶段。</li>
+<li><strong>驳回</strong>：第一版建议 run <code>failed</code> + 记录驳回原因（评论/activity）。不自动回退到某个阶段：回退会引入环和「最多回退几次」的策略，第一版不值得；用户修正后可以重新启动一个 run（历史 run 保留）。</li>
+<li>后续可支持 <code>on_reject: {goto: stage_key, max_loops: 2}</code>，但需要环检测和 UI 表达。</li>
+</ul>
+<hr />
+<h2 id="10-api">10. API 设计（示意）</h2>
+<p>所有接口都在现有 workspace 中间件下，路径沿用 <code>/api/...</code> 风格。</p>
+<h3 id="101">10.1 模板管理</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>权限</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/workflows</code></td>
+<td>成员</td>
+<td>列表（含 enabled、阶段数）</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/workflows</code></td>
+<td>owner/admin</td>
+<td>创建</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/workflows/{id}</code></td>
+<td>成员</td>
+<td>详情</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/workflows/{id}</code></td>
+<td>owner/admin</td>
+<td>整体更新 definition</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/workflows/{id}</code></td>
+<td>owner/admin</td>
+<td>软删除（有活跃 run 时 409）</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/workflows/{id}/duplicate</code></td>
+<td>owner/admin</td>
+<td>复制模板（可选）</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="102">10.2 运行</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>权限</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/issues/{id}/workflow-runs</code></td>
+<td>成员</td>
+<td>body: <code>{workflow_id}</code>；已有活跃 run 返回 409 + 现有 run</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/issues/{id}/workflow-runs</code></td>
+<td>成员</td>
+<td>run 历史</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/workflow-runs/{runId}</code></td>
+<td>成员</td>
+<td>run + 阶段列表</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/workflow-runs/{runId}/pause</code></td>
+<td>发起人或 admin</td>
+<td>请求在阶段边界暂停</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/workflow-runs/{runId}/resume</code></td>
+<td>发起人或 admin</td>
+<td>恢复</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/workflow-runs/{runId}/cancel</code></td>
+<td>发起人或 admin</td>
+<td>取消并级联取消任务</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/workflow-runs/{runId}/stages/{stageRunId}/complete</code></td>
+<td>当前 member 阶段执行者或 admin</td>
+<td>member 阶段完成</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/workflow-runs/{runId}/stages/{stageRunId}/approve</code></td>
+<td>审批人</td>
+<td>body: <code>{comment?}</code></td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/workflow-runs/{runId}/stages/{stageRunId}/reject</code></td>
+<td>审批人</td>
+<td>body: <code>{reason}</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>错误语义：</p>
+<ul>
+<li><code>403</code>：workspace 角色不足、不是当前阶段执行者/审批人、私有 agent 不可用；</li>
+<li><code>404</code>：跨 workspace 访问（不暴露存在性）；</li>
+<li><code>409</code>：已有活跃 run、模板被运行中引用无法删除、任务派发冲突；</li>
+<li><code>422</code>：definition 校验失败（阶段为空、key 重复、actor 不存在、超过 20 个阶段）。</li>
+</ul>
+<h3 id="103">10.3 事件</h3>
+<p>新增 WS 事件（<code>server/pkg/protocol/events.go</code>）：</p>
+<ul>
+<li><code>workflow:run_updated</code>：<code>{run_id, issue_id, status, current_stage_key, current_stage_run_id}</code></li>
+<li><code>workflow:stage_updated</code>：<code>{run_id, stage_run_id, status, name, attempt}</code></li>
+</ul>
+<p>前端通过现有的 query invalidation 机制刷新（参考 <code>packages/core/realtime/</code> 的既有模式）。</p>
+<h3 id="104-cli">10.4 CLI（后续）</h3>
+<p>第一版不要求 agent 用 CLI 操作工作流。后续可加：</p>
+<pre><code>multica workflow list
+multica workflow status &lt;issue-id&gt;
+multica workflow complete-stage --task &lt;task-id&gt; --verdict pass|fail
+</code></pre>
+<hr />
+<h2 id="11">11. 前端与交互</h2>
+<h3 id="111">11.1 导航</h3>
+<p>在左侧 Configure 分组新增 <code>Workflows</code>（<code>packages/views/layout/app-sidebar.tsx:82</code> 的 <code>configureNav</code>）。所有成员可见（只读），owner/admin 可编辑。</p>
+<h3 id="112-workflows">11.2 Workflows 页面</h3>
+<p>复用 Agents 页面的左右分栏模式（<code>packages/views/agents/components/agents-page.tsx</code>）：</p>
+<ul>
+<li>左列：模板列表 + 新建按钮 + 启用状态。</li>
+<li>右列：模板详情 = 名称/描述 + 阶段编辑列表。</li>
+<li>阶段编辑用<strong>有序列表 + 上移/下移</strong>，不做画布；每行包含：类型、执行者（agent/member picker）、指令（多行输入）、失败策略、超时。</li>
+<li>保存时前端校验 + 后端 422 错误展示。</li>
+<li>空状态：无模板时展示「创建一个流程模板」+ 推荐模板（可选）。</li>
+</ul>
+<h3 id="113-issue">11.3 Issue 详情</h3>
+<p>在右侧 Properties 侧栏（<code>packages/views/issues/components/issue-detail.tsx:1175</code> 附近）Project 之后增加 <code>Workflow</code> 区块：</p>
+<ul>
+<li>无 run：<code>Start workflow</code> 按钮 + 模板选择器。</li>
+<li>有 run：当前阶段名称、阶段序号/总数、执行者头像、状态 badge；操作按钮（暂停/恢复/取消/完成阶段/审批）。</li>
+<li>阶段历史：点击展开侧面板或对话框，按时间列出每个阶段的尝试、结果、评论链接。</li>
+<li>运行中的 issue 在列表/看板卡片上显示阶段 badge（可放到后续阶段）。</li>
+</ul>
+<h3 id="114-inbox">11.4 Inbox</h3>
+<p>新增通知类型的展示文案和跳转（点击打开 issue 并定位到 Workflow 区块）。审批通知提供「通过/驳回」快捷操作（可放到后续）。</p>
+<h3 id="115">11.5 设计约束</h3>
+<ul>
+<li>所有颜色/字号/间距遵守 <code>docs/design.md</code>，使用 shadcn 语义 token。</li>
+<li>不引入新的视觉语言；阶段状态用现有 badge 形态。</li>
+<li>第一版不提供线框图/wireframe，交互细节在实现前单独确认（本方案的明确缺口）。</li>
+</ul>
+<hr />
+<h2 id="12">12. 权限、安全与多租户</h2>
+<ul>
+<li>所有查询和写入都按 <code>workspace_id</code> 过滤，沿用 <code>RequireWorkspaceMember</code>。</li>
+<li>模板管理：owner/admin；启动/暂停/取消：workspace 成员；审批：配置的审批人。</li>
+<li>agent 阶段必须校验 agent 属于当前 workspace、对发起人可见（私有 agent 仅 owner/admin 可使用），复用 <code>canAssignAgent</code> 的规则（<code>server/internal/handler/issue.go</code>）。</li>
+<li>阶段指令是成员输入的文本，会进入 agent prompt，等同于 issue 描述的信任级别；不额外放大权限。需要在 UI 提示「指令会发送给 AI agent」。</li>
+<li>agent 通过 <code>X-Agent-ID</code> 调用 API 时，禁止创建/修改 workflow；只允许读取与自己任务相关的阶段信息（如果后续开放 verdict 接口，必须校验任务归属）。</li>
+<li>审计：模板创建/修改、run 启动/暂停/取消/审批都写 <code>activity_log</code>，actor 使用真实操作者。</li>
+<li>删除模板：有活跃 run 时拒绝；采用<strong>软删除</strong>（<code>deleted_at</code>），这样历史 run 的 <code>workflow_id</code> 仍然有效，run 也保留自己的 definition 快照，不受模板后续修改或删除影响。</li>
+</ul>
+<hr />
+<h2 id="13">13. 可观测性</h2>
+<ul>
+<li><strong>activity_log</strong>：新增 action：<code>workflow_started</code>、<code>workflow_stage_started</code>、<code>workflow_stage_completed</code>、<code>workflow_stage_failed</code>、<code>workflow_paused</code>、<code>workflow_resumed</code>、<code>workflow_cancelled</code>、<code>workflow_completed</code>。details 里带 run_id/stage_key/attempt。</li>
+<li><strong>日志</strong>：<code>slog</code> 字段统一加 <code>run_id</code>、<code>stage_run_id</code>、<code>task_id</code>；派发失败、对账修复、状态冲突都记 warn。</li>
+<li><strong>UI</strong>：issue 内的时间线已经支持 activity（<code>ListTimeline</code>），工作流事件直接进入时间线；不新增独立时间线。</li>
+<li><strong>用量</strong>：任务用量仍按 agent/runtime 统计；可选在 run 详情里聚合展示（后续）。</li>
+</ul>
+<hr />
+<h2 id="14">14. 分阶段落地</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>内容</th>
+<th>明确不做</th>
+<th>验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>0. 本方案</strong></td>
+<td>评审、确认第 17 节问题</td>
+<td>任何代码</td>
+<td>方案获批</td>
+</tr>
+<tr>
+<td><strong>1. MVP</strong></td>
+<td>模板 CRUD（JSON definition）、线性 agent/member/approval 阶段、手动启动、任务完成推进、issue 面板、activity + inbox、取消</td>
+<td>自动启动、重试/超时、跨 agent 代码交接、DAG</td>
+<td>验收场景可走通；单元 + 集成 + 1 条 e2e</td>
+</tr>
+<tr>
+<td><strong>2. 稳定性</strong></td>
+<td>失败重试/超时、reconciler、暂停/恢复、通知完善、看板 badge</td>
+<td>分支、分支交接</td>
+<td>人为中断、任务失败、进程重启后 run 不丢</td>
+</tr>
+<tr>
+<td><strong>3. 上下文</strong></td>
+<td>claim 响应带阶段信息、daemon prompt 注入、CLI <code>issue get</code> 带 workflow、跨 agent 分支交接、自动启动规则</td>
+<td>DAG</td>
+<td>跨 agent 评审可跑通</td>
+</tr>
+<tr>
+<td><strong>4. 编排进阶</strong></td>
+<td>条件分支、并行、跨 issue、可视化</td>
+<td>—</td>
+<td>另立设计文档</td>
+</tr>
+</tbody>
+</table></div>
+<p>阶段 1 的范围建议控制在一个 PR 系列内（schema + service + handler + 前端页面 + 测试），不要和阶段 2 的 reconciler 混在一起。</p>
+<hr />
+<h2 id="15">15. 测试策略</h2>
+<ul>
+<li><strong>纯状态机</strong>：<code>server/internal/workflow/*_test.go</code>，表驱动覆盖：启动、推进、失败策略、驳回、取消、非法定义校验。无 DB。</li>
+<li><strong>集成</strong>：沿用 <code>server/internal/handler</code> 的测试 DB 模式（<code>testPool</code>）：</li>
+<li>启动 run 后任务被创建且带 <code>workflow_stage_run_id</code>；</li>
+<li>完成任务后下一阶段被派发；</li>
+<li>重复启动返回 409；</li>
+<li>两个并发推进只有一个成功（条件更新）；</li>
+<li>取消 run 会取消活跃任务。</li>
+<li><strong>前端</strong>：<code>packages/views</code> 的 Vitest 测试阶段编辑器校验、issue 面板状态展示；<code>packages/core</code> 测 query/mutation key。</li>
+<li><strong>E2E</strong>：Playwright 走「创建模板 → issue 启动 → 完成任务 → 审批 → run completed」。</li>
+<li><strong>迁移</strong>：up/down 都能执行（CI 目前只跑 up，需要手动验证 down）。</li>
+<li><strong>不做</strong>：性能压测、多实例并发压测（第一版单实例，留到阶段 2）。</li>
+</ul>
+<hr />
+<h2 id="16">16. 风险</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>风险</th>
+<th>影响</th>
+<th>缓解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>与现有 assign/comment 触发器重复建任务</td>
+<td>agent 重复执行、评论重复</td>
+<td>D4 + 7.7 的交互矩阵；优先做「活跃 run 时不自动派发 assignee」</td>
+</tr>
+<tr>
+<td>事件总线丢事件导致 run 卡住</td>
+<td>流程停在某阶段无人察觉</td>
+<td>7.6 reconciler；run 详情显示最后活动时间</td>
+</tr>
+<tr>
+<td>agent 自行改 issue 状态，和引擎冲突</td>
+<td>状态来回跳、UI 误导</td>
+<td>run 期间 prompt 明确禁止改状态；引擎在阶段边界统一设置状态；发现人工/agent 改状态时暂停</td>
+</tr>
+<tr>
+<td>跨 agent 代码交接不可用</td>
+<td>「实现→评审」跨 agent 场景无法真正工作</td>
+<td>8.3 的分阶段策略；第一版限制同 agent 或人工评审</td>
+</tr>
+<tr>
+<td>流程模板过于复杂，用户不会用</td>
+<td>功能上线但无人使用</td>
+<td>第一版只做线性 + 内置示例模板；编辑用列表不用画布</td>
+</tr>
+<tr>
+<td>审批通知打扰</td>
+<td>用户关通知</td>
+<td>只通知审批人/发起人；同类通知合并</td>
+</tr>
+<tr>
+<td>重试与唯一索引冲突</td>
+<td>阶段卡住</td>
+<td>7.3/6.4 的延后重试 + reconciler</td>
+</tr>
+<tr>
+<td>模板编辑影响运行中的 run</td>
+<td>行为不一致</td>
+<td>definition 快照</td>
+</tr>
+<tr>
+<td>循环/无限推进</td>
+<td>资源浪费</td>
+<td>线性无环；阶段数上限 20；重试次数上限 3；run 最大时长告警</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="17">17. 待确认问题（需要产品或维护者决策）</h2>
+<p>这些问题的答案会直接改变实现范围，建议在进入阶段 1 前逐条确认：</p>
+<ol>
+<li><strong>编排对象</strong>：第一版的目标场景是「单个 issue 内的多阶段流水线」，还是「一个项目/父 issue 下的跨 issue 编排」？本方案按前者设计。</li>
+<li><strong>执行者</strong>：阶段是否必须支持「人」作为执行者，还是只编排 agent？本方案默认支持 agent + member + approval。</li>
+<li><strong>人工审批</strong>：第一版是否必须有人工审批门？如果不需要，MVP 可以再小一圈。</li>
+<li><strong>跨 agent 代码交接</strong>：是否要求「实现 agent → 评审 agent」在同一个代码分支上工作？如果是，8.3 的 B 方案（分支传递）必须进入第一版，范围会显著扩大。</li>
+<li><strong>阶段完成信号</strong>：是否接受「任务成功完成 = 阶段完成」，还是必须由 agent 显式给出 pass/fail verdict？后者需要新的 CLI/协议。</li>
+<li><strong>issue 状态归属</strong>：run 期间由引擎控制 issue 状态（启动设 in_progress、完成设 done），还是继续由 agent/人控制？本方案建议引擎控制，并在 prompt 中禁止 agent 改状态。</li>
+<li><strong>assignee 语义</strong>：run 期间 assignee 是否跟随阶段执行者？（D6）</li>
+<li><strong>启动方式</strong>：第一版只需要手动启动，还是必须支持「issue 创建/打标签时自动启动」？</li>
+<li><strong>模板范围</strong>：模板是 workspace 私有，还是需要内置模板/跨 workspace 导入导出？</li>
+<li><strong>失败默认值</strong>：失败后默认暂停等人处理，还是自动重试一次再暂停？默认重试上限和超时时间是多少？</li>
+<li><strong>历史数据</strong>：已存在的 issue 是否需要在 UI 上隐藏 Workflow 入口，还是所有 issue 都可以启动？</li>
+<li><strong>删除语义</strong>：模板删除用软删除还是硬删除？历史 run 是否长期保留？</li>
+<li><strong>驳回语义</strong>：审批驳回后是结束当前 run（本方案默认），还是必须自动回到上一个执行阶段？后者需要引入受控回边和最大循环次数。</li>
+</ol>
+<hr />
+<h2 id="18">18. 本版的明确缺口</h2>
+<ul>
+<li><strong>没有任何实现</strong>：没有迁移、没有接口、没有前端代码。本文件是唯一交付物。</li>
+<li><strong>没有最终 API 契约</strong>：第 10 节是示意，字段名和错误码会在实现前细化。</li>
+<li><strong>没有视觉设计</strong>：没有线框图、没有组件拆分、没有移动端适配方案；交互细节需在实现前确认。</li>
+<li><strong>没有跨 agent 分支交接的完整方案</strong>：8.3 只给出方向，daemon/execenv 的改动需要单独设计。</li>
+<li><strong>没有容量/性能评估</strong>：没有估算 run/stage 表增长、对账扫描成本、通知量。</li>
+<li><strong>没有权限矩阵的最终版本</strong>：第 12 节是原则，具体到每个 endpoint 的 role 校验需要实现时逐条确认。</li>
+<li><strong>没有 prompt 注入防护设计</strong>：阶段指令与 issue 描述同信任级，是否需要额外隔离未评估。</li>
+<li><strong>没有国际化方案</strong>：新增 UI 文案目前按仓库现状只提供英文。</li>
+<li><strong>没有与 projects/labels 的联动</strong>：第一版模板是 workspace 级，不按项目过滤。</li>
+</ul>
+<hr />
+<h2 id="19">19. 代码索引（写实现前先读）</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>主题</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>任务生命周期</td>
+<td><code>server/internal/service/task.go</code></td>
+</tr>
+<tr>
+<td>任务队列 SQL</td>
+<td><code>server/pkg/db/queries/agent.sql</code>、<code>server/migrations/001_init.up.sql</code>（<code>agent_task_queue</code>）</td>
+</tr>
+<tr>
+<td>任务字段演进</td>
+<td><code>server/migrations/003_task_context.up.sql</code>、<code>020_task_session.up.sql</code>、<code>028_task_trigger_comment.up.sql</code>、<code>033_chat.up.sql</code>、<code>037_fix_pending_task_unique_index.up.sql</code></td>
+</tr>
+<tr>
+<td>issue 触发逻辑</td>
+<td><code>server/internal/handler/issue.go:888</code>、<code>:1081-1088</code>、<code>:1129</code>、<code>:1136</code>、<code>:1159</code></td>
+</tr>
+<tr>
+<td>评论/mention 触发</td>
+<td><code>server/internal/handler/comment.go:263</code>、<code>:369</code></td>
+</tr>
+<tr>
+<td>daemon claim / prompt</td>
+<td><code>server/internal/handler/daemon.go:341</code>、<code>server/internal/daemon/prompt.go</code></td>
+</tr>
+<tr>
+<td>事件总线</td>
+<td><code>server/internal/events/bus.go</code></td>
+</tr>
+<tr>
+<td>监听器模式</td>
+<td><code>server/cmd/server/activity_listeners.go</code>、<code>subscriber_listeners.go</code>、<code>notification_listeners.go</code></td>
+</tr>
+<tr>
+<td>定时任务模式</td>
+<td><code>server/cmd/server/runtime_sweeper.go</code></td>
+</tr>
+<tr>
+<td>路由</td>
+<td><code>server/cmd/server/router.go</code></td>
+</tr>
+<tr>
+<td>前端导航</td>
+<td><code>packages/views/layout/app-sidebar.tsx</code></td>
+</tr>
+<tr>
+<td>issue 详情属性栏</td>
+<td><code>packages/views/issues/components/issue-detail.tsx:1175</code></td>
+</tr>
+<tr>
+<td>agent 页面模式（可复用）</td>
+<td><code>packages/views/agents/components/agents-page.tsx</code></td>
+</tr>
+<tr>
+<td>设计规范</td>
+<td><code>docs/design.md</code></td>
+</tr>
+<tr>
+<td>既有实现计划格式</td>
+<td><code>docs/plans/*.md</code></td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="a-definition">附录 A：示例 definition</h2>
+<pre><code class="language-json">{
+  &quot;stages&quot;: [
+    {
+      &quot;key&quot;: &quot;implement&quot;,
+      &quot;name&quot;: &quot;实现&quot;,
+      &quot;kind&quot;: &quot;agent&quot;,
+      &quot;actor_type&quot;: &quot;agent&quot;,
+      &quot;actor_id&quot;: &quot;&lt;agent-uuid&gt;&quot;,
+      &quot;instructions&quot;: &quot;实现 issue 描述中的功能。完成后在 issue 下评论说明改动，不要修改 issue 状态。&quot;,
+      &quot;on_failure&quot;: { &quot;strategy&quot;: &quot;retry&quot;, &quot;max_attempts&quot;: 2 },
+      &quot;timeout_seconds&quot;: 3600
+    },
+    {
+      &quot;key&quot;: &quot;review&quot;,
+      &quot;name&quot;: &quot;代码评审&quot;,
+      &quot;kind&quot;: &quot;agent&quot;,
+      &quot;actor_type&quot;: &quot;agent&quot;,
+      &quot;actor_id&quot;: &quot;&lt;agent-uuid&gt;&quot;,
+      &quot;instructions&quot;: &quot;评审当前改动，给出明确结论并评论。&quot;,
+      &quot;on_failure&quot;: { &quot;strategy&quot;: &quot;pause&quot; }
+    },
+    {
+      &quot;key&quot;: &quot;acceptance&quot;,
+      &quot;name&quot;: &quot;人工验收&quot;,
+      &quot;kind&quot;: &quot;approval&quot;,
+      &quot;approver&quot;: { &quot;type&quot;: &quot;member&quot;, &quot;id&quot;: &quot;&lt;member-uuid&gt;&quot; },
+      &quot;instructions&quot;: &quot;确认功能符合预期后通过。&quot;
+    }
+  ],
+  &quot;on_complete&quot;: { &quot;issue_status&quot;: &quot;done&quot; }
+}
+</code></pre>
+<h2 id="b">附录 B：一次典型运行时序</h2>
+<pre><code>用户            Web/API                 WorkflowService            TaskService            daemon
+ |  启动 run      |                          |                        |                    |
+ |---------------&gt;|  校验/建 run+stage#1     |                        |                    |
+ |                |-------------------------&gt;|  派发 stage#1          |                    |
+ |                |                          |-----------------------&gt;|  建 task + stage_id |
+ |                |                          |                        |-------------------&gt;| claim
+ |                |                          |                        |                    | 执行
+ |                |                          |   task:completed       |                    |
+ |                |                          |&lt;-----------------------|                    |
+ |                |   stage#1 completed      |  推进 stage#2          |                    |
+ |                |&lt;-------------------------|-----------------------&gt;|  建 task            |
+ |                |                          |                        |                    |
+ |                |   stage#2 ...            |                        |                    |
+ |                |                          |  进入 approval         |                    |
+ |                |                          |  建 inbox 通知         |                    |
+ |  审批通过       |                          |                        |                    |
+ |---------------&gt;|  approve                 |  下一阶段/完成 run     |                    |
+</code></pre>
+<hr />
+<p><em>本文件是讨论稿，不是实现承诺。评审意见请直接开在 PR 或 issue #1 下。</em></p>
+    </article>
+    <footer class="footer">
+      <p>本 HTML 由 <code>docs/plans/2026-11-06-workflow-orchestration-design.md</code> 生成（2026-11-07），便于阅读与打印；Markdown 源文件为准。</p>
+      <p>Multica · 工作流编排设计方案 v0.1 · 仅方案讨论，不含实现。</p>
+    </footer>
+  </main>
+</div>
+<a class="backtop" href="#top" aria-label="回到顶部">↑</a>
+</body>
+</html>
