@@ -28,7 +28,15 @@ export class WSClient {
   }
 
   connect() {
-    const url = new URL(this.baseUrl);
+    let url: URL;
+    try {
+      url = new URL(this.baseUrl);
+    } catch (err) {
+      // A misconfigured URL must not crash the whole app: keep the page usable
+      // and only lose realtime updates until the deployment is fixed.
+      this.logger.error("invalid WebSocket URL; realtime disabled", this.baseUrl, err);
+      return;
+    }
     // In cookie mode, the browser sends the HttpOnly cookie automatically
     // with the WebSocket upgrade request — no token in URL needed.
     if (!this.cookieAuth && this.token)

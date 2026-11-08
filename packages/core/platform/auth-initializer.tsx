@@ -15,13 +15,37 @@ export function AuthInitializer({
   onLogin,
   onLogout,
   storage = defaultStorage,
+  cookieAuth,
 }: {
   children: ReactNode;
   onLogin?: () => void;
   onLogout?: () => void;
   storage?: StorageAdapter;
+  cookieAuth?: boolean;
 }) {
   useEffect(() => {
+    const api = getApi();
+    const wsId = storage.getItem("multica_workspace_id");
+
+    if (cookieAuth) {
+      // Cookie mode: the HttpOnly auth cookie is sent automatically by the
+      // browser, so there is no token in storage. Ask the API whether the
+      // session is still valid instead of assuming the user is signed out.
+      Promise.all([api.getMe(), api.listWorkspaces()])
+        .then(([user, wsList]) => {
+          onLogin?.();
+          useAuthStore.setState({ user, isLoading: false });
+          useWorkspaceStore.getState().hydrateWorkspace(wsList, wsId);
+        })
+        .catch((err) => {
+          logger.error("cookie auth init failed", err);
+          onLogout?.();
+          useAuthStore.setState({ user: null, isLoading: false });
+        });
+      return;
+    }
+
+    // Token mode: read from localStorage (Electron / legacy).
     const token = storage.getItem("multica_token");
     if (!token) {
       onLogout?.();
@@ -29,9 +53,7 @@ export function AuthInitializer({
       return;
     }
 
-    const api = getApi();
     api.setToken(token);
-    const wsId = storage.getItem("multica_workspace_id");
 
     Promise.all([api.getMe(), api.listWorkspaces()])
       .then(([user, wsList]) => {
