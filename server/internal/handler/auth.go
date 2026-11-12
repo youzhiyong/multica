@@ -163,6 +163,12 @@ func (h *Handler) ensureUserWorkspace(ctx context.Context, user db.User) error {
 	return tx.Commit(ctx)
 }
 
+// isProduction reports whether the server runs with production semantics, where
+// the development verification code is disabled.
+func isProduction() bool {
+	return os.Getenv("APP_ENV") == "production"
+}
+
 func generateCode() (string, error) {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -214,6 +220,17 @@ func (h *Handler) SendCode(w http.ResponseWriter, r *http.Request) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if email == "" {
 		writeError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+
+	// Without an email provider there is no way to deliver the code. In
+	// production the development bypass is disabled, so accepting the request
+	// would only tell the user to check an inbox that will never receive
+	// anything. Fail with an actionable error instead.
+	if isProduction() && !h.EmailService.Configured() {
+		slog.Error("verification code requested but email delivery is not configured",
+			append(logger.RequestAttrs(r), "email", email)...)
+		writeError(w, http.StatusServiceUnavailable, "email delivery is not configured on this server; set RESEND_API_KEY or contact the administrator")
 		return
 	}
 
@@ -273,7 +290,7 @@ func (h *Handler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isMasterCode := code == "888888" && os.Getenv("APP_ENV") != "production"
+	isMasterCode := code == "888888" && !isProduction()
 	if !isMasterCode && subtle.ConstantTimeCompare([]byte(code), []byte(dbCode.Code)) != 1 {
 		_ = h.Queries.IncrementVerificationCodeAttempts(r.Context(), dbCode.ID)
 		writeError(w, http.StatusBadRequest, "invalid or expired code")
