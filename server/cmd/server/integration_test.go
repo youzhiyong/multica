@@ -306,6 +306,56 @@ func TestSendCodeAndVerify(t *testing.T) {
 	meResp.Body.Close()
 }
 
+func TestSendCodeFailsWhenEmailDeliveryIsNotConfiguredInProduction(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("RESEND_API_KEY", "")
+
+	ctx := context.Background()
+	const email = "integration-sendcode-unconfigured@multica.ai"
+	t.Cleanup(func() {
+		testPool.Exec(ctx, `DELETE FROM verification_code WHERE email = $1`, email)
+	})
+
+	// NewRouter builds its EmailService from the environment at construction
+	// time, so the router must be created after t.Setenv.
+	hub := realtime.NewHub()
+	go hub.Run()
+	bus := events.New()
+	router := NewRouter(testPool, hub, bus)
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{"email": email})
+	resp, err := http.Post(srv.URL+"/auth/send-code", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("send-code failed: %v", err)
+	}
+	respBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("send-code: expected 503, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var errResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &errResp); err != nil {
+		t.Fatalf("failed to parse error response: %v", err)
+	}
+	if !strings.Contains(errResp.Error, "email delivery is not configured") {
+		t.Fatalf("expected an actionable configuration error, got %q", errResp.Error)
+	}
+
+	var count int
+	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM verification_code WHERE email = $1`, email).Scan(&count); err != nil {
+		t.Fatalf("failed to count verification codes: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no verification code to be stored, got %d", count)
+	}
+}
+
 func TestVerifyCodeCreatesWorkspaceForNewUser(t *testing.T) {
 	const email = "new-integration-verify@multica.ai"
 	ctx := context.Background()

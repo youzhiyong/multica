@@ -25,7 +25,11 @@ func main() {
 		slog.Warn("JWT_SECRET is not set — using insecure default. Set JWT_SECRET for production use.")
 	}
 	if os.Getenv("RESEND_API_KEY") == "" {
-		slog.Warn("RESEND_API_KEY is not set — email verification codes will be printed to the log instead of emailed.")
+		if os.Getenv("APP_ENV") == "production" {
+			slog.Error("RESEND_API_KEY is not set — no emails can be sent and email-code login is disabled. Set RESEND_API_KEY (with a verified RESEND_FROM_EMAIL) to let users sign in.")
+		} else {
+			slog.Warn("RESEND_API_KEY is not set — email verification codes will be printed to the log instead of emailed.")
+		}
 	}
 
 	port := os.Getenv("PORT")

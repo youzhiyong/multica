@@ -16,7 +16,7 @@ All configuration is done via environment variables. Copy `.env.example` as a st
 
 ### Email (Required for Authentication)
 
-Multica uses email-based magic link authentication via [Resend](https://resend.com).
+Multica uses email verification codes for authentication via [Resend](https://resend.com).
 
 | Variable | Description |
 |----------|-------------|
@@ -24,6 +24,8 @@ Multica uses email-based magic link authentication via [Resend](https://resend.c
 | `RESEND_FROM_EMAIL` | Sender email address (default: `noreply@multica.ai`) |
 
 > **Note:** For local/development deployments without email configured, you can use the master verification code `888888` to log in.
+>
+> When `APP_ENV=production`, email delivery is required: `888888` is disabled and the API rejects verification-code requests with an explicit configuration error until `RESEND_API_KEY` is set. The sender domain in `RESEND_FROM_EMAIL` must be verified in your Resend account, otherwise Resend rejects the message.
 
 ### Google OAuth (Optional)
 

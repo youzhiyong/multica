@@ -30,9 +30,15 @@ func NewEmailService() *EmailService {
 	}
 }
 
+// Configured reports whether an email provider is available. When it is not,
+// no email is sent: verification codes are only written to the server log.
+func (s *EmailService) Configured() bool {
+	return s.client != nil
+}
+
 func (s *EmailService) SendVerificationCode(to, code string) error {
 	if s.client == nil {
-		fmt.Printf("[DEV] Verification code for %s: %s\n", to, code)
+		fmt.Printf("Email is not configured (RESEND_API_KEY unset) — verification code for %s: %s\n", to, code)
 		return nil
 	}
 
